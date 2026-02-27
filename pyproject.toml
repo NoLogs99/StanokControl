@@ -16,4 +16,5 @@ dependencies = [
     "asyncio >=4.0.0",
     "mashumaro >=3.20",
     "asyncpg >=0.31.0",
+    "tortoise-orm[asyncpg] >=1.1.5",
 ]
