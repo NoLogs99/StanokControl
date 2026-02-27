@@ -1,17 +1,12 @@
 from loguru import logger
-from pathlib import Path
 import sys
 
-from src.config.config import config
 
+def setup_logging(config):
+    config.LOGS_PATH.mkdir(parents=True, exist_ok=True)
 
-def setup_logging():
-    # Убираем дефолтный логгер loguru
     logger.remove()
 
-    # ==========================
-    # 1. Консольный лог (цветной)
-    # ==========================
     logger.add(
         sys.stdout,
         level="DEBUG" if config.DEBUG else "INFO",
@@ -24,9 +19,6 @@ def setup_logging():
         catch=True,
     )
 
-    # ==========================
-    # 2. Основной лог-файл
-    # ==========================
     logger.add(
         config.LOGS_PATH / "bot.log",
         rotation="10 MB",
@@ -37,9 +29,6 @@ def setup_logging():
         enqueue=True,
     )
 
-    # ==========================
-    # 3. Лог ошибок
-    # ==========================
     logger.add(
         config.LOGS_PATH / "errors.log",
         level="ERROR",
@@ -48,16 +37,11 @@ def setup_logging():
         compression="zip",
         encoding="utf-8",
         enqueue=True,
-        filter=lambda r: r["level"].name in ["ERROR", "CRITICAL"],
     )
 
-    # ==========================
-    # 4. JSON-логи только в production
-    # ==========================
     if not config.DEBUG:
         logger.add(
             config.LOGS_PATH / "bot.jsonl",
-            format="{time} | {level} | {message}",
             serialize=True,
             rotation="500 MB",
             retention="90 days",
@@ -65,17 +49,4 @@ def setup_logging():
             enqueue=True,
         )
 
-    logger.success("Логирование успешно инициализировано ✓")
-    logger.info("Уровень консоли  : {}", "DEBUG" if config.DEBUG else "INFO")
-    logger.info("Путь к логам     : {}", config.LOGS_PATH)
-
     return logger
-
-
-# ==========================
-# Singleton logger
-# ==========================
-logger = setup_logging()
-
-# Удобный алиас
-log = logger
