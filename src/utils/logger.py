@@ -4,12 +4,13 @@ import sys
 
 from src.config.config import config
 
+
 def setup_logging():
     # Убираем дефолтный логгер loguru
     logger.remove()
 
     # ==========================
-    # Консольный лог (цветной)
+    # 1. Консольный лог (цветной)
     # ==========================
     logger.add(
         sys.stdout,
@@ -24,21 +25,20 @@ def setup_logging():
     )
 
     # ==========================
-    # Лог в файл с ротацией
+    # 2. Основной лог-файл
     # ==========================
     logger.add(
-        config.LOGS_PATH / "bot.log", 
-        rotation="10 MB", 
-        retention="14 days", 
-        compression="zip", 
-        level="DEBUG" if config.DEBUG else "INFO", 
-        encoding="utf-8", 
+        config.LOGS_PATH / "bot.log",
+        rotation="10 MB",
+        retention="14 days",
+        compression="zip",
+        level="DEBUG" if config.DEBUG else "INFO",
+        encoding="utf-8",
         enqueue=True,
-        # filter=lambda record: record["level"].name in ["INFO", "DEBUG", "WARNING"]  
-)
+    )
 
     # ==========================
-    # Лог в файл с ротацией
+    # 3. Лог ошибок
     # ==========================
     logger.add(
         config.LOGS_PATH / "errors.log",
@@ -51,30 +51,31 @@ def setup_logging():
         filter=lambda r: r["level"].name in ["ERROR", "CRITICAL"],
     )
 
-     # ────────────────────────────────────────────────
-     # 4. JSON-логи только в production (если понадобится для мониторинга)
-     # ────────────────────────────────────────────────
-     if not config.DEBUG:
-         logger.add(
-             config.LOGS_PATH / "bot.jsonl",
-             format="{time} | {level} | {message}",
-             serialize=True,
-             rotation="500 MB",
-             retention="90 days",
-             level="INFO",
-             enqueue=True,
-    )    
+    # ==========================
+    # 4. JSON-логи только в production
+    # ==========================
+    if not config.DEBUG:
+        logger.add(
+            config.LOGS_PATH / "bot.jsonl",
+            format="{time} | {level} | {message}",
+            serialize=True,
+            rotation="500 MB",
+            retention="90 days",
+            level="INFO",
+            enqueue=True,
+        )
 
-    logger.success("логирование успешно инициализировано ✓")
+    logger.success("Логирование успешно инициализировано ✓")
     logger.info("Уровень консоли  : {}", "DEBUG" if config.DEBUG else "INFO")
     logger.info("Путь к логам     : {}", config.LOGS_PATH)
 
     return logger
+
 
 # ==========================
 # Singleton logger
 # ==========================
 logger = setup_logging()
 
-# Удобные алиасы
+# Удобный алиас
 log = logger
