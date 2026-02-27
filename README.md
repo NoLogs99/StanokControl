@@ -1,7 +1,5 @@
 # StanokControl
 
-# StanokControl
-
 ####################
 # Languages
 ####################
