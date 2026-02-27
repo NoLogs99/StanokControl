@@ -6,8 +6,13 @@ requires-python = ">="
 authors = [{name = "NoLogs99"}]
 
 dependencies = [
-    "pathlib >=",
-    "dotenv >=",
-    "python-dotenv >=",
-    "loguru >=",
+    "pathlib >=1.0.1",
+    "dotenv >=0.9.9",
+    "python-dotenv >=1.2.1",
+    "loguru >=0.7.3",
+    "pytest >=8.4.2",
+    "pytest-cov >=7.0.0",
+    "sentry-sdk >=2.53.0",
+    "asyncio >=4.0.0",
+    "mashumaro >=3.20",
 ]
