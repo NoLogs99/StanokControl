@@ -20,4 +20,5 @@ dependencies = [
     "tqdm >=4.67.1",
     "rich >=14.3.3",
     "poetry >=2.3.2",
+    "pyfiglet >=1.0.4",
 ]
