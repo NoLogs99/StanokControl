@@ -1,1 +1,10 @@
-
+{
+  "files.exclude": {
+    "node_modules/": true,
+    "**/dist": true,
+    "**/venv": true,
+    "**/__pycache__": true,
+    "**/poetry.lock": true,
+    "**/__init__.py": true,
+  }
+}
