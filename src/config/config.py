@@ -10,7 +10,7 @@ CONFIG_DIR = Path(__file__).resolve().parent
 BASE_DIR = CONFIG_DIR.parent.parent
 
 # Загружаем .env
-load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
+load_dotenv(override=True)
 
 @dataclass(frozen=True, slots=True)
 class Config(DataClassDictMixin):
