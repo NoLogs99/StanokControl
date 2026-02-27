@@ -1,1 +1,13 @@
+[project]
+name = "stanok-control"
+version = "0.1.0"
+description = "Will"
+requires-python = ">="
+authors = [{name = "NoLogs99"}]
 
+dependencies = [
+    "pathlib >=1.0.1",
+    "dotenv >=0.9.9",
+    "python-dotenv >=1.2.1",
+    "poetry >=2.3.2",
+]
