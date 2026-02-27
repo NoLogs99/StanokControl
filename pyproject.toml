@@ -15,4 +15,5 @@ dependencies = [
     "sentry-sdk >=2.53.0",
     "asyncio >=4.0.0",
     "mashumaro >=3.20",
+    "asyncpg >=0.31.0",
 ]
