@@ -27,4 +27,5 @@ dependencies = [
     "aiohttp >=3.8.6",
     "aiofiles >=25.1.0",
     "aiogram >=2.25.1",
+    "msgspec",
 ]
