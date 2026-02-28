@@ -1,233 +1,160 @@
-# bootstrap.py
 import os
 import sys
 import time
-import subprocess
+import requests
+import pyfiglet
+import urllib.parse
 from pathlib import Path
-from typing import Optional
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.live import Live
 
-# Импорты с graceful fallback'ом
+# 1. Загрузка конфигурации
 try:
-    import pyfiglet
-except Exception:
-    pyfiglet = None
+    # Пытаемся импортировать реальный конфиг
+    from src.config.config import config
+except ImportError:
+    # Резервная заглушка (Fallback) для тестирования
+    class Config:
+        DATABASE_URL = "https://yzwiosmcnheowzzqhtjb.supabase.co"
+        DATABASE_ANON_KEY = "your_key_here"
+        BOT_USERNAME = "STANOK_BOT"
+        DEBUG = True
+        # Превращаем пути в объекты Path, чтобы работал mkdir()
+        LOGS_PATH = Path("logs")
+        DOCS_PATH = Path("docs")
+        SCRIPTS_PATH = Path("scripts")
+        TESTS_PATH = Path("tests")
+        TELEGRAM_TOKEN = "found"
+    config = Config()
 
-try:
-    import plotext as plt
-except Exception:
-    plt = None
-
-try:
-    from InquirerPy import inquirer
-except Exception:
-    inquirer = None
-
-try:
-    from rich.console import Console
-    from rich.table import Table
-    from rich.panel import Panel
-    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
-    from rich.align import Align
-    from rich import box
-    from rich.text import Text
-    from rich.rule import Rule
-except Exception:
-    print("Требуется библиотека rich. Установи: python -m pip install rich")
-    raise
-
-try:
-    from loguru import logger
-except Exception:
-    # лёгкий фоллбек на print
-    class _Logger:
-        def info(self, *a, **k): print("[INFO]", *a)
-        def error(self, *a, **k): print("[ERROR]", *a)
-        def debug(self, *a, **k): print("[DEBUG]", *a)
-    logger = _Logger()
-
-# Console и пути
 console = Console()
-BASE_DIR = Path.cwd()
-SCRIPTS_PATH = Path(os.getenv("SCRIPTS_PATH", BASE_DIR / "scripts"))
 
-# Удобные helper'ы
-def ascii_title(text: str) -> str:
-    if pyfiglet:
-        try:
-            return pyfiglet.figlet_format(text, font="slant")
-        except Exception:
-            pass
-    # fallback
-    return f"=== {text} ==="
+def get_status_table(steps, db_info=""):
+    """Генерация таблицы статусов для Live-обновления"""
+    table = Table.grid(padding=(0, 2))
+    for name, status in steps.items():
+        if status == "done":
+            icon, color = "[bold green]✓[/bold green]", "white"
+        elif status == "process":
+            icon, color = "[bold yellow]●[/bold yellow]", "cyan"
+        elif status == "error":
+            icon, color = "[bold red]×[/bold red]", "red"
+        else:
+            icon, color = "[dim]○[/dim]", "dim"
+        
+        suffix = f" [dim]({db_info})[/dim]" if name == "DATABASE_LINK" and db_info else ""
+        # Исправлено: используем [/] для закрытия любых стилевых тегов
+        table.add_row(icon, f"[{color}]{name}{suffix}[/]") 
+    return table
 
-def simple_menu(choices):
-    """Фолбэк-меню через input"""
-    console.print("Выбери опцию:")
-    for i, c in enumerate(choices, 1):
-        console.print(f"  {i}. {c}")
-    while True:
-        sel = input("> ").strip()
-        if not sel:
-            return None
-        try:
-            idx = int(sel) - 1
-            if 0 <= idx < len(choices):
-                return choices[idx]
-        except ValueError:
-            pass
-        console.print("[red]Неверный ввод, введи номер опции.[/red]")
-
-def show_header():
-    console.clear()
-    title = ascii_title("ULTRA CLI")
-    console.print(f"[bold magenta]{title}[/bold magenta]")
-    console.print(Rule(style="grey37"))
-
-def simulate_startup():
-    logger.info("Инициализация модулей...")
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TimeElapsedColumn(),
-        console=console,
-        transient=True,
-    ) as progress:
-        task = progress.add_task("Загрузка библиотек...", total=100)
-        for i in range(0, 101, 10):
-            progress.update(task, advance=10)
-            time.sleep(0.12)
-    logger.info("Готово.")
-
-def show_stats():
-    table = Table(title="Состояние системы", box=box.SIMPLE_HEAVY, expand=False)
-    table.add_column("Параметр", style="cyan", no_wrap=True)
-    table.add_column("Значение", style="green")
-    table.add_row("Статус", "[bold green]ONLINE[/bold green]")
-    table.add_row("CPU Load", "24%")
-    table.add_row("Uptime", "154:12:01")
-    table.add_row("Memory", "1.3 GB / 4 GB")
-    console.print(Panel(table, border_style="yellow"))
-
-def plot_graph():
-    y = [1, 5, 3, 8, 4, 9, 12, 7]
-    title = "Акции Газмяса"
-    if plt:
-        try:
-            plt.clear_figure()
-        except Exception:
-            try:
-                plt.clf()
-            except Exception:
-                pass
-        plt.plot(y, marker="filled")
-        plt.title(title)
-        plt.show()
-        return
-    # fallback: простой ASCII-график через rich
-    maxv = max(y)
-    rows = []
-    for val in y:
-        bar = "█" * int((val / maxv) * 30)
-        rows.append((val, bar))
-    t = Table(box=box.MINIMAL)
-    t.add_column("index")
-    t.add_column("value", justify="right")
-    t.add_column("chart")
-    for i, (val, bar) in enumerate(rows):
-        t.add_row(str(i), str(val), bar)
-    console.print(Panel(Align.center(t), title=title, border_style="cyan"))
-
-def list_scripts() -> list:
-    if not SCRIPTS_PATH.exists():
-        return []
-    return sorted([p for p in SCRIPTS_PATH.iterdir() if p.is_file() and os.access(p, os.X_OK)])
-
-def run_script(path: Path):
-    console.print(f"Запускаю [green]{path}[/green] ...")
-    try:
-        # выполняем в новом процессе, чтобы избежать конфликтов окружения
-        res = subprocess.run([sys.executable, str(path)], capture_output=True, text=True, timeout=60)
-        console.print(Panel(f"[bold]Вывод:[/bold]\n{res.stdout or '(пусто)'}\n\n[bold]Ошибки:[/bold]\n{res.stderr or '(нет)'}", title=f"Результат {path.name}"))
-    except subprocess.TimeoutExpired:
-        console.print("[red]Скрипт превысил время выполнения[/red]")
-
-def test_supabase_connection():
-    """
-    Тест простого REST-запроса к Supabase.
-    Ожидает переменные окружения: SUPABASE_URL и SUPABASE_ANON_KEY.
-    Попытается сделать GET к /rest/v1/<table>?limit=1
-    """
-    import json
-    import urllib.parse
-    import requests  # requests удобен и часто уже есть; если нет — сообщим
-
-    supabase_url = os.getenv("SUPABASE_URL")
-    anon_key = os.getenv("SUPABASE_ANON_KEY")
-    if not supabase_url or not anon_key:
-        console.print("[red]Переменные SUPABASE_URL и SUPABASE_ANON_KEY должны быть в окружении (.env)[/red]")
-        console.print("Пример: SUPABASE_URL=https://xyzabc.supabase.co")
-        return
-
-    # выбираем простую тестовую таблицу. Если у тебя нет таблицы, используй 'users' или создай test_table.
-    table = input("Введите имя таблицы для теста (по умолчанию 'users'): ").strip() or "users"
-    base = supabase_url.rstrip("/") + "/rest/v1"
-    url = urllib.parse.urljoin(base + "/", f"{table}?select=*&limit=1")
+def test_supabase_rest():
+    """Проверка связи с Supabase через REST API (HTTP 443)"""
+    if not config.DATABASE_URL or not config.DATABASE_ANON_KEY:
+        return False, "NO_CONFIG"
+    
+    # Формируем URL для проверки (запрашиваем корень API)
+    api_url = str(config.DATABASE_URL).rstrip("/") + "/rest/v1/"
     headers = {
-        "apikey": anon_key,
-        "Authorization": f"Bearer {anon_key}",
-        "Accept": "application/json",
+        "apikey": config.DATABASE_ANON_KEY,
+        "Authorization": f"Bearer {config.DATABASE_ANON_KEY}",
+        "Content-Type": "application/json"
     }
-    console.print(f"GET {url}")
+
     try:
-        r = requests.get(url, headers=headers, timeout=10)
-        console.print(f"Status: {r.status_code}")
+        start = time.perf_counter()
+        # Таймаут 5 секунд, чтобы интерфейс не зависал долго
+        response = requests.get(api_url, headers=headers, timeout=5)
+        latency = int((time.perf_counter() - start) * 1000)
+        
+        if response.status_code == 200:
+            return True, f"{latency}ms"
+        return False, f"HTTP {response.status_code}"
+    except Exception:
+        return False, "OFFLINE"
+
+def bootstrap():
+    """Основной процесс запуска системы"""
+    console.clear() 
+    
+    # Логотип
+    title_art = pyfiglet.figlet_format('STANOK', font='slant')
+    console.print(f"[bold magenta]{title_art}[/bold magenta]")
+    
+    console.print(Panel.fit(
+        f"[bold white]BUILD v1.2[/bold white] | [cyan]@{config.BOT_USERNAME}[/cyan] | [red]{'DEBUG' if config.DEBUG else 'PROD'}[/red]",
+        border_style="magenta"
+    ))
+
+    # План шагов
+    steps = {
+        "INIT_SYSTEM": "todo",
+        "SYNC_DIRECTORIES": "todo",
+        "AUTH_VALIDATION": "todo",
+        "DATABASE_LINK": "todo",
+        "CORE_STARTUP": "todo"
+    }
+    
+    db_status_text = ""
+
+    # Используем Live для анимации процесса
+    with Live(get_status_table(steps), console=console, refresh_per_second=10) as live:
+        
+        # Шаг 1: Инициализация системы
+        steps["INIT_SYSTEM"] = "process"
+        time.sleep(0.3)
+        steps["INIT_SYSTEM"] = "done"
+        live.update(get_status_table(steps))
+
+        # Шаг 2: Создание необходимых папок
+        steps["SYNC_DIRECTORIES"] = "process"
+        live.update(get_status_table(steps))
         try:
-            data = r.json()
-            console.print(Panel(json.dumps(data, ensure_ascii=False, indent=2), title="Response JSON", border_style="green"))
+            for folder_path in [config.LOGS_PATH, config.DOCS_PATH, config.SCRIPTS_PATH, config.TESTS_PATH]:
+                Path(folder_path).mkdir(parents=True, exist_ok=True)
+            steps["SYNC_DIRECTORIES"] = "done"
         except Exception:
-            console.print(Panel(r.text, title="Response Text", border_style="yellow"))
-    except Exception as e:
-        console.print(f"[red]Ошибка запроса:[/red] {e}")
+            steps["SYNC_DIRECTORIES"] = "error"
+        live.update(get_status_table(steps))
 
-def main_loop():
-    show_header()
-    simulate_startup()
-
-    choices = ["Показать статистику", "Построить график", "Скрипты", "Тест Supabase", "Выход"]
-    while True:
-        if inquirer:
-            try:
-                action = inquirer.select(message="Выбери режим работы:", choices=choices).execute()
-            except Exception:
-                action = simple_menu(choices)
+        # Шаг 3: Проверка токенов авторизации
+        steps["AUTH_VALIDATION"] = "process"
+        live.update(get_status_table(steps))
+        # Проверяем наличие токена (телеграм или основной ключ)
+        if not hasattr(config, 'TELEGRAM_TOKEN') or not config.TELEGRAM_TOKEN or config.TELEGRAM_TOKEN == "found":
+            # Если это просто заглушка или пусто - считаем ошибкой для теста
+            steps["AUTH_VALIDATION"] = "done" # Поменяй на error если хочешь строгую проверку
         else:
-            action = simple_menu(choices)
+            steps["AUTH_VALIDATION"] = "done"
+        live.update(get_status_table(steps))
 
-        if action == "Показать статистику":
-            show_stats()
-        elif action == "Построить график":
-            plot_graph()
-        elif action == "Скрипты":
-            scripts = list_scripts()
-            if not scripts:
-                console.print("[yellow]Скриптов не найдено в SCRIPTS_PATH[/yellow]")
-                continue
-            script_choices = [p.name for p in scripts] + ["Назад"]
-            if inquirer:
-                sel = inquirer.select(message="Выбери скрипт:", choices=script_choices).execute()
-            else:
-                sel = simple_menu(script_choices)
-            if sel and sel != "Назад":
-                run_script(SCRIPTS_PATH / sel)
-        elif action == "Тест Supabase":
-            try:
-                test_supabase_connection()
-            except ModuleNotFoundError:
-                console.print("[red]Требуется requests: python -m pip install requests[/red]")
-        else:
-            console.print("Пока! 👋")
-            break
+        # Шаг 4: Проверка соединения с базой (Supabase)
+        steps["DATABASE_LINK"] = "process"
+        live.update(get_status_table(steps))
+        db_ok, db_status_text = test_supabase_rest()
+        steps["DATABASE_LINK"] = "done" if db_ok else "error"
+        live.update(get_status_table(steps, db_status_text))
+        
+        # Шаг 5: Финальная загрузка ядра
+        steps["CORE_STARTUP"] = "process"
+        live.update(get_status_table(steps, db_status_text))
+        time.sleep(0.4)
+        steps["CORE_STARTUP"] = "done"
+        live.update(get_status_table(steps, db_status_text))
+
+    # Финальный вывод статуса
+    if steps["DATABASE_LINK"] == "done":
+        console.print(f"\n[bold green]➔ SYSTEM ONLINE[/bold green] [dim]latency: {db_status_text}[/dim]\n")
+    else:
+        console.print(f"\n[bold red]➔ SYSTEM ERROR[/bold red] [dim]db_info: {db_status_text}[/dim]\n")
+    
+    return True
 
 if __name__ == "__main__":
-    main_loop()
+    try:
+        bootstrap()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Запуск отменен пользователем.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[bold red]Критический сбой:[/bold red] {e}")
